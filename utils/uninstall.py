@@ -5,7 +5,20 @@ import typer
 from termcolor import cprint
 
 
-def uninstall_function():
+def do_uninstall():
+    subprocess.run(
+        ["sudo", Path("/opt/openhubble-cli/scripts/uninstall.sh")],
+        check=True,
+    )
+
+    cprint("Uninstalled successfully.", "green")
+
+
+def uninstall_function(force: bool):
+    if force:
+        do_uninstall()
+        raise typer.Exit()
+
     confirm = typer.confirm("Do you really want to uninstall OpenHubble CLI?")
 
     cprint("")
@@ -14,9 +27,4 @@ def uninstall_function():
         cprint("Thanks for keeping OpenHuble CLI.", "green")
         raise typer.Abort()
 
-    subprocess.run(
-        ["sudo", Path("/opt/openhubble-cli/scripts/uninstall.sh")],
-        check=True,
-    )
-
-    cprint("Uninstalled successfully.", "green")
+    do_uninstall()
