@@ -79,13 +79,13 @@ def version():
 
 
 @app.command("update", rich_help_panel="CLI", help="Update application")
-def update():
-    update_function()
+def update(force: types.force = False):
+    update_function(force)
 
 
 @app.command("uninstall", rich_help_panel="CLI", help="Uninstall application")
-def uninstall():
-    uninstall_function()
+def uninstall(force: types.force = False):
+    uninstall_function(force)
 
 
 @app.command("ping", rich_help_panel="Ping Agent", help="Ping Agent server")
