@@ -58,7 +58,8 @@ def main():
 
 def get_github_releases():
     response = requests.get(
-        "https://api.github.com/repos/OpenHubble/cli/releases"
+        "https://api.github.com/repos/OpenHubble/cli/releases",
+        timeout=10
     )
     response.raise_for_status()
     return response.json()
@@ -148,7 +149,7 @@ def update(confirm: bool = True):
     )
 
     cprint("Updated successfully.", "green") \
-
+ \
     @ app.command()
 
 
@@ -186,6 +187,7 @@ def ping(
         r = requests.get(
             url,
             headers={"X-API-KEY": key},
+            timeout=10
         )
 
         r.raise_for_status()
@@ -221,6 +223,7 @@ def get_metric_command(
         r = requests.get(
             url,
             headers={"X-API-KEY": key},
+            timeout=10
         )
 
         r.raise_for_status()
