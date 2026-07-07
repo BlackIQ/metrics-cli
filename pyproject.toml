@@ -1,6 +1,6 @@
 [tool.openhubble]
 name = "OpenHubble CLI"
-version = "1.5.2"
+version = "1.5.3"
 description = "OpenHubble Agent"
 authors = ["OpenHubble Team <team@openhubble.com>", "Amirhossein Mohammadi <hi@amirhossein.info>"]
 
