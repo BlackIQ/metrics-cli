@@ -1,9 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
+
+from typing import Annotated
 
 import requests
 import typer
 from art import text2art
+from packaging.version import Version
 from rich.console import Console
+from rich.table import Table
 from rich_gradient import Gradient
 from termcolor import cprint
 
@@ -12,15 +16,16 @@ from settings import settings
 app = typer.Typer(
     help="OpenHubble CLI",
     no_args_is_help=True,
-    add_completion=False,
+    add_completion=True,
 )
 
 console = Console()
 
 
 # -------------------------------------------------------------------
-# UI
+# Art
 # -------------------------------------------------------------------
+
 
 def print_art():
     openhubble_art = text2art("OpenHubble")
@@ -44,14 +49,6 @@ def print_art():
     )
 
 
-@app.callback()
-def main():
-    """
-    OpenHubble CLI
-    """
-    check_for_updates()
-
-
 # -------------------------------------------------------------------
 # GitHub
 # -------------------------------------------------------------------
@@ -65,54 +62,31 @@ def get_github_releases():
     return response.json()
 
 
-def compare_versions(current_version, releases):
-    latest = releases[0]
-
-    if latest["tag_name"] == current_version:
-        return None
-
-    return f"""
-+-----------------------------------------------+
-| New version available!
-|
-| {latest["name"]}
-| Version: {latest["tag_name"]}
-| Release: {latest["html_url"]}
-+-----------------------------------------------+
-"""
-
-
-def ask_user_to_update(current_version):
-    if typer.confirm(
-            f"You are using {current_version}. Update now?"
-    ):
-        update(False)
-    else:
-        cprint(
-            "Run 'openhubble update' whenever you're ready.",
-            "yellow",
-        )
-
-
 def check_for_updates():
-    current = settings.project_version
+    latest_release = get_github_releases()[0]
 
-    releases = get_github_releases()
+    current_version = settings.project_version
+    latest_version = latest_release["tag_name"]
+    latest_name = latest_release["name"]
+    latest_url = latest_release["html_url"]
 
-    msg = compare_versions(current, releases)
+    if not Version(latest_version) > Version(current_version):
+        return {
+            'new': False
+        }
+    else:
+        return {
+            'new': True,
+            'latest':
+                {
+                    'latest_version': latest_version,
+                    'latest_name': latest_name,
+                    'latest_url': latest_url
+                }
+        }
 
-    if msg:
-        cprint(msg, "green")
-        ask_user_to_update(current)
 
-
-# -------------------------------------------------------------------
-# Commands
-# -------------------------------------------------------------------
-
-@app.command()
-def version():
-    """Show version."""
+def show_version():
     cprint(
         f"OpenHubble CLI {settings.project_version}",
         "cyan",
@@ -120,66 +94,129 @@ def version():
     )
 
 
-@app.command()
-def update(confirm: bool = True):
-    """Update the CLI."""
-
-    current = settings.project_version
-    releases = get_github_releases()
-
-    latest = releases[0]["tag_name"]
-
-    if latest == current:
-        cprint(
-            f"Already using latest version ({current})",
-            "yellow",
-        )
+def version_callback(value: bool):
+    if value:
+        show_version()
         raise typer.Exit()
 
-    cprint(f"Updating to {latest}", "blue")
 
-    if confirm:
-        if not typer.confirm("Continue?"):
-            cprint("Aborted.", "yellow")
-            raise typer.Exit()
+# -------------------------------------------------------------------
+# UI
+# -------------------------------------------------------------------
 
-    # subprocess.run(
-    #     ["sudo", Path("/opt/openhubble-cli/scripts/update.sh")],
-    #     check=True,
+@app.callback()
+def main(
+        version: Annotated[
+            bool | None,
+            typer.Option(
+                "--version", "-v",
+                callback=version_callback,
+                is_eager=True,
+                help="Show application version"
+            )
+        ] = None
+):
+    pass
+
+
+# -------------------------------------------------------------------
+# Commands
+# -------------------------------------------------------------------
+
+@app.command("version", rich_help_panel="CLI", help="Show application version")
+def version():
+    show_version()
+
+
+@app.command("update", rich_help_panel="CLI", help="Update application")
+def update():
+    check_update = check_for_updates()
+
+    if not check_update['new']:
+        cprint(f"You are using latest version of OpenHubble CLI: {settings.project_version}")
+
+    latest = check_update['latest']
+
+    table = Table("New version is available!")
+    table.add_row(f"{latest["latest_name"]}")
+    table.add_row(f"Version: {latest["latest_version"]}")
+    table.add_row(f"Release note: {latest["latest_url"]}")
+
+    console.print(table)
+
+    cprint("")
+
+    cprint(f"You are using version {settings.project_version}", "yellow")
+    confirm = typer.confirm(f"Do you want to update {latest["latest_version"]}")
+
+    cprint("")
+
+    if not confirm:
+        cprint("Run 'openhubble update' whenever you're ready.", "yellow")
+        raise typer.Abort()
+
+    cprint(f"Updating OpenHubble CLI to version {latest["latest_version"]}", "blue")
+
+    subprocess.run(
+        ["sudo", Path("/opt/openhubble-cli/scripts/update.sh")],
+        check=True,
     )
 
-    cprint("Updated successfully.", "green") \
- \
-    @ app.command()
+    cprint("Updated successfully.", "green")
 
 
+@app.command("uninstall", rich_help_panel="CLI", help="Uninstall application")
 def uninstall():
-    """Uninstall OpenHubble."""
+    confirm = typer.confirm("Do you really want to uninstall OpenHubble CLI?")
 
-    if not typer.confirm("Really uninstall?"):
-        cprint("Aborted.", "yellow")
-        raise typer.Exit()
+    cprint("")
 
-    # subprocess.run(
-    #     ["sudo", Path("/opt/openhubble-cli/scripts/uninstall.sh")],
-    #     check=True,
-    # )
+    if not confirm:
+        cprint("Thanks for keeping OpenHuble CLI.", "green")
+        raise typer.Abort()
+
+    subprocess.run(
+        ["sudo", Path("/opt/openhubble-cli/scripts/uninstall.sh")],
+        check=True,
+    )
 
     cprint("Uninstalled successfully.", "green")
 
 
-@app.command()
+@app.command("ping", rich_help_panel="Agent", help="Ping Agent server")
 def ping(
-        host: str = "127.0.0.1",
-        port: str = "9703",
-        key: str = "apikey",
-        protocol: str = typer.Option(
-            "https",
-            "--protocol",
-            help="http or https",
-        ),
+        host: Annotated[
+            str, typer.Option(
+                "--host", "-H",
+                help="Host running Agent",
+                prompt="Enter Agent host"
+            )
+        ] = "127.0.0.1",
+        port: Annotated[
+            int, typer.Option(
+                "--port", "-P",
+                help="Port that Agent expose",
+                prompt="Enter Agent port"
+            )
+        ]
+        = 9703,
+        key: Annotated[
+            str | None, typer.Option(
+                "--key", "-K",
+                help="API Key you defined in Agent",
+                prompt="Enter the Agent API Key"
+            )
+        ] = "apikey",
+        use_https: Annotated[
+            bool, typer.Option(
+                "--use-https",
+                help="Use connection over HTTPS with Agent",
+                prompt="Do you want to use HTTPS",
+                is_eager=True
+            )
+        ] = False
 ):
-    """Ping the agent."""
+    protocol = "https" if use_https else "http"
 
     url = f"{protocol}://{host}:{port}/api/ping"
 
@@ -201,18 +238,47 @@ def ping(
         cprint(f"Error: {e}", "red")
 
 
-@app.command("get")
+@app.command("get", rich_help_panel="Agent", help="Get metric from agent")
 def get_metric_command(
-        host: str = "127.0.0.1",
-        port: str = "9703",
-        key: str = "apikey",
-        metric: str = "hostname",
-        protocol: str = typer.Option(
-            "https",
-            "--protocol",
-        ),
+        host: Annotated[
+            str, typer.Option(
+                "--host", "-H",
+                help="Host running Agent",
+                prompt="Enter Agent host"
+            )
+        ] = "127.0.0.1",
+        port: Annotated[
+            int, typer.Option(
+                "--port", "-P",
+                help="Port that Agent expose",
+                prompt="Enter Agent port"
+            )
+        ]
+        = 9703,
+        key: Annotated[
+            str | None, typer.Option(
+                "--key", "-K",
+                help="API Key you defined in Agent",
+                prompt="Enter the Agent API Key"
+            )
+        ] = "apikey",
+        use_https: Annotated[
+            bool, typer.Option(
+                "--use-https",
+                help="Use connection over HTTPS with Agent",
+                prompt="Do you want to use HTTPS",
+                is_eager=True
+            )
+        ] = False,
+        metric: Annotated[
+            str, typer.Option(
+                "--metric", "-M",
+                help="Metric you want to get from Agent",
+                prompt="Enter the metric"
+            )
+        ] = "agent.hostname"
 ):
-    """Get a metric."""
+    protocol = "https" if use_https else "http"
 
     url = (
         f"{protocol}://{host}:{port}"
@@ -237,13 +303,6 @@ def get_metric_command(
 
     except requests.RequestException as e:
         cprint(f"Error: {e}", "red")
-
-
-@app.command()
-def help():
-    """Show custom help."""
-    print_art()
-    typer.echo(app.get_help())
 
 
 if __name__ == "__main__":
